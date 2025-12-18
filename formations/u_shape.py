@@ -14,6 +14,7 @@ COLOR_ACTIVE = (255, 140, 0)
 U_BASE_DIST = 4.0        # Distanza posteriore
 U_WIDTH_SPACING = 2.5    # Larghezza laterale
 U_DEPTH_FACTOR = 2.0     # Curvatura
+HIJACK_SUCCESS_DIST = 2.0 
 
 # Logica Smart Reassignment
 HP_PROXIMITY_THRESHOLD = 4.0 # Distanza entro cui attivare il riassegnamento intelligente
@@ -30,7 +31,8 @@ class UShapeFormation:
     def __init__(self, leader_start_pos):
         self.defenders = []
         self.hijack_target = Vector2(0, 0)
-        
+        self.success = False
+
         # Gestione ruoli dinamici
         self.reassign_timer = 0.0
         
@@ -52,6 +54,11 @@ class UShapeFormation:
         vy = self.hijack_target.y - leader.pos.y
         dist_to_hp = math.hypot(vx, vy)
         
+        if dist_to_hp < HIJACK_SUCCESS_DIST:
+            self.success = True
+        else:
+            self.success = False
+            
         # Normalizzazione (Forward e Right vectors)
         # Se siamo sopra l'HP, manteniamo l'ultima direzione valida per stabilità
         if dist_to_hp > 0.01:
@@ -137,8 +144,9 @@ class UShapeFormation:
 
     def draw(self, surface, camera):
         # Target Marker
+        tgt_color = (0, 255, 0) if self.success else (255, 0, 255)
         h_scr = camera.world_to_screen(self.hijack_target)
-        pygame.draw.circle(surface, (0, 255, 0), (int(h_scr[0]), int(h_scr[1])), 8, 2)
+        pygame.draw.circle(surface, tgt_color, (int(h_scr[0]), int(h_scr[1])), 8, 2)
 
         # Drones
         for d in self.defenders:
