@@ -2,6 +2,7 @@ import pygame
 from config import TEXT_COLOR
 
 class Button:
+    """Simple clickable UI button with hover state."""
     def __init__(self, x, y, w, h, text, callback):
         self.rect = pygame.Rect(x, y, w, h)
         self.text = text
@@ -11,6 +12,7 @@ class Button:
         self.font = pygame.font.SysFont("Arial", 16, bold=True)
 
     def draw(self, surface, mouse_pos):
+        """Render button and text; highlight when hovered."""
         col = self.hover_color if self.rect.collidepoint(mouse_pos) else self.color
         pygame.draw.rect(surface, col, self.rect, border_radius=5)
         pygame.draw.rect(surface, (150, 150, 150), self.rect, 2, border_radius=5)
@@ -19,12 +21,14 @@ class Button:
         surface.blit(txt_surf, txt_rect)
 
     def check_click(self, mouse_pos):
+        """Invoke callback and return True when click falls inside the button."""
         if self.rect.collidepoint(mouse_pos):
             self.callback()
             return True
         return False
 
 def draw_hud(screen, mode, drone):
+    """Draw top-left simulation info and controls cheat-sheet."""
     font = pygame.font.SysFont("Consolas", 14)
     lookahead = f"{drone.bendy._current_lookahead:.1f}m" if drone else "N/A"
     

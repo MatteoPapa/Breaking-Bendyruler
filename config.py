@@ -1,5 +1,7 @@
 import math
 
+# Centralized simulation constants used across modules.
+
 # --- Simulation Settings ---
 SCREEN_WIDTH = 1280
 SCREEN_HEIGHT = 720
@@ -34,9 +36,11 @@ OA_MARGIN_MAX = 2.0
 
 # --- Helpers ---
 def constrain_float(val, min_val, max_val):
+    """Clamp a float value to [min_val, max_val]."""
     return max(min_val, min(val, max_val))
 
 def wrap_180(angle_deg):
+    """Normalize an angle in degrees to the [-180, 180] range."""
     while angle_deg > 180:
         angle_deg -= 360
     while angle_deg < -180:

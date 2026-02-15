@@ -1,4 +1,4 @@
-import pygame
+import pygame 
 import math
 import sys
 import argparse
@@ -6,12 +6,12 @@ import argparse
 from config import *
 from bendyruler import Vector2
 
-# Imports dai nuovi moduli
+# Core modules
 from core.camera import Camera
 from core.ui import Button, draw_hud
 from entities.drone import Drone
 
-# Import dinamico delle formazioni
+# Optional formation modules (loaded only when available)
 try:
     from formations.c_shape import CShapeFormation
     from formations.u_shape import UShapeFormation
@@ -20,28 +20,29 @@ except ImportError:
     pass
 
 def main():
-    # --- ARGUMENTS ---
+    # Parse startup options
     parser = argparse.ArgumentParser(description="BendyRuler Simulation")
     parser.add_argument("--formation", choices=["NONE", "CSHAPE", "USHAPE", "SMART_USHAPE"], default="NONE")
     args = parser.parse_args()
     current_mode = args.formation
 
-    # --- SETUP ---
+    # Initialize pygame and core app state
     pygame.init()
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.RESIZABLE)
     pygame.display.set_caption(f"BendyRuler Simulation - Mode: {current_mode}")
     clock = pygame.time.Clock()
     
-    # Core systems
+    # Camera is responsible for world/screen conversions, pan and zoom
     camera = Camera(SCREEN_WIDTH, SCREEN_HEIGHT)
     
-    # Simulation State
+    # Mutable simulation state for the current scenario
     drone = None
     target_pos = None
     obstacles = []
     formation = None 
 
     def reset_scenario():
+        """Reset leader, target, static obstacles, and optional formation mode."""
         nonlocal drone, target_pos, obstacles, formation
         start_pos = Vector2(10, 20)
         drone = Drone(start_pos.x, start_pos.y)
@@ -65,47 +66,48 @@ def main():
 
     running = True
     while running:
+        # Frame timing and live input snapshot
         dt = clock.tick(FPS) / 1000.0
         mouse_pos = pygame.mouse.get_pos()
         keys = pygame.key.get_pressed()
 
-        # --- INPUT HANDLING ---
+        # Handle input events (window, keyboard, mouse)
         for event in pygame.event.get():
             if event.type == pygame.QUIT: running = False
             
-            # Resize
+            # Keep camera/UI dimensions in sync with the window
             elif event.type == pygame.VIDEORESIZE:
                 camera.width = event.w
                 camera.height = event.h
                 btn_reset.rect.y = event.h - 60
             
-            # Keyboard Shortcuts
+            # Keyboard shortcuts
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_r: reset_scenario()
             
-            # Zoom
+            # Mouse wheel zoom around cursor position
             elif event.type == pygame.MOUSEWHEEL:
                 camera.handle_zoom(mouse_pos, event.y)
             
-            # Mouse Interactions
+            # Mouse interactions (target, hijack point, obstacles, pan)
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if btn_reset.check_click(mouse_pos): continue
                 
-                # Pan start
+                # Middle click starts camera panning
                 if event.button == 2:
                     camera.is_panning = True
                     camera.last_mouse_pos = mouse_pos
                 
                 world_mouse = camera.screen_to_world(mouse_pos)
                 
-                # Left Click (Target / Hijack)
+                # Left click sets leader target; Shift+Left sets hijack target
                 if event.button == 1: 
                     if (keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]):
                         if formation: formation.set_hijack_target(world_mouse)
                     else:
                         target_pos = world_mouse
                 
-                # Right Click (Obstacles)
+                # Right click toggles static circular obstacles
                 elif event.button == 3: 
                     clicked = None
                     for obs in obstacles:
@@ -117,27 +119,28 @@ def main():
             elif event.type == pygame.MOUSEBUTTONUP:
                 if event.button == 2: camera.is_panning = False
         
-        # Pan update
+        # Apply panning delta while dragging
         if camera.is_panning:
             mx, my = mouse_pos
             camera.offset_x += mx - camera.last_mouse_pos[0]
             camera.offset_y += my - camera.last_mouse_pos[1]
             camera.last_mouse_pos = mouse_pos
 
-        # --- LOGIC UPDATE ---
+        # Update formation first so defenders become dynamic obstacles for the leader
         dynamic_obstacles = []
         if formation:
             dynamic_obstacles = formation.update(dt, drone)
         
+        # Update leader movement using static + dynamic obstacles
         drone.update(dt, target_pos, obstacles + dynamic_obstacles)
 
-        # --- DRAWING ---
+        # Render full frame
         screen.fill(BACKGROUND_COLOR)
         
-        # Draw Grid (Optional: could be moved to Camera or dedicated func)
+        # World grid for spatial readability
         _draw_grid(screen, camera)
 
-        # Draw Static Obstacles
+        # Static obstacles and their OA safety margins
         for obs in obstacles:
             center = camera.world_to_screen(obs['pos'])
             radius_px = int(camera.scale_len(obs['radius']))
@@ -152,12 +155,12 @@ def main():
             pygame.draw.circle(screen, OBSTACLE_COLOR, center, radius_px)
             pygame.draw.circle(screen, OBSTACLE_OUTLINE, center, radius_px, 2)
 
-        # Draw Entities
+        # Formation, debug paths, and leader rendering
         if formation: formation.draw(screen, camera)
         _draw_debug_lines(screen, camera, drone, target_pos)
         drone.draw(screen, camera)
         
-        # UI
+        # Overlay UI
         btn_reset.draw(screen, mouse_pos)
         draw_hud(screen, current_mode, drone)
 
@@ -167,7 +170,7 @@ def main():
     sys.exit()
 
 def _draw_grid(screen, camera):
-    # Logica griglia semplificata
+    """Draw major grid lines in world space (every 5 meters)."""
     start_x = int((-camera.offset_x) / (PIXELS_PER_METER * camera.zoom))
     end_x = int((camera.width - camera.offset_x) / (PIXELS_PER_METER * camera.zoom)) + 1
     start_y = int((-camera.offset_y) / (PIXELS_PER_METER * camera.zoom))
@@ -183,6 +186,7 @@ def _draw_grid(screen, camera):
             pygame.draw.line(screen, GRID_COLOR, (0, p[1]), (camera.width, p[1]), 1)
 
 def _draw_debug_lines(screen, camera, drone, target_pos):
+    """Visualize direct path and selected OA intermediate target."""
     drone_scr = camera.world_to_screen(drone.pos)
     target_scr = camera.world_to_screen(target_pos)
     oa_target_scr = camera.world_to_screen(drone.last_oa_target)

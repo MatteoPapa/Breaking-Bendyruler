@@ -4,6 +4,7 @@ import sys
 from config import *
 
 class Vector2:
+    """Small 2D vector helper used by simulation and planner logic."""
     def __init__(self, x, y):
         self.x = x
         self.y = y
@@ -26,17 +27,18 @@ class Vector2:
         return Vector2(self.x / l, self.y / l)
 
 class AP_OABendyRuler:
+    """2D adaptation of ArduPilot's BendyRuler obstacle avoidance strategy."""
     def __init__(self):
-        # Parameters
+        # Tunable planner parameters
         self._lookahead = OA_BENDYRULER_LOOKAHEAD_DEFAULT
         self._bendy_ratio = OA_BENDYRULER_RATIO_DEFAULT
         self._bendy_angle = OA_BENDYRULER_ANGLE_DEFAULT
         self._margin_max = OA_MARGIN_MAX
         
-        # State
+        # Planner memory across frames
         self._current_lookahead = self._lookahead
         self._bearing_prev = sys.float_info.max
-        self._destination_prev = Vector2(-1000, -1000) # Arbitrary unlikely pos
+        self._destination_prev = Vector2(-1000, -1000)  # Arbitrary unlikely position
 
     def get_bearing_to(self, origin, dest):
         """Returns bearing in degrees from origin to dest"""
@@ -90,7 +92,7 @@ class AP_OABendyRuler:
 
     def resist_bearing_change(self, destination, current_loc, active, bearing_test, 
                               lookahead_step1_dist, margin, proximity_only, obstacles):
-        
+        """Dampen sudden heading changes when a previous direction is still acceptable."""
         resisted_change = False
         dest_change = False
         
@@ -124,7 +126,7 @@ class AP_OABendyRuler:
         Main update loop. 
         Returns: (active, destination_new)
         """
-        # Bendy ruler always sets origin to current_loc (in C++ impl)
+        # BendyRuler evaluates paths from the vehicle's current position.
         
         bearing_to_dest = self.get_bearing_to(current_loc, destination)
         distance_to_dest = self.get_distance(current_loc, destination)
@@ -156,8 +158,8 @@ class AP_OABendyRuler:
     def search_xy_path(self, current_loc, destination, ground_course_deg, 
                        lookahead_step1_dist, lookahead_step2_dist, 
                        bearing_to_dest, distance_to_dest, obstacles):
-
-        # Search in increments
+        """Search candidate bearings and choose the safest near-feasible waypoint."""
+        # Best-candidate tracking across all tested bearings
         best_bearing = bearing_to_dest
         best_bearing_margin = -sys.float_info.max
         have_best_bearing = False
@@ -166,6 +168,7 @@ class AP_OABendyRuler:
 
         iterations = int(170 / OA_BENDYRULER_BEARING_INC_XY)
 
+        # Evaluate symmetric angular offsets around direct bearing to destination
         for i in range(iterations + 1):
             for bdir in range(2):
                 # Skip duplicate 0 check
@@ -184,7 +187,7 @@ class AP_OABendyRuler:
                     best_margin = margin
                 
                 if margin > self._margin_max:
-                    # Clear path found for step 1
+                    # Step 1 path segment is clear
                     if not have_best_bearing:
                         best_bearing = bearing_test
                         best_bearing_margin = margin
@@ -194,7 +197,7 @@ class AP_OABendyRuler:
                         best_bearing = bearing_test
                         best_bearing_margin = margin
                     
-                    # Second stage test (Step 2)
+                    # Step 2 checks whether we can continue from test_loc toward destination
                     test_bearings = [0.0, 45.0, -45.0]
                     bearing_to_dest2 = self.get_bearing_to(test_loc, destination)
                     dist_from_test_to_dest = self.get_distance(test_loc, destination)
@@ -208,8 +211,8 @@ class AP_OABendyRuler:
                         margin2 = self.calc_avoidance_margin(test_loc, test_loc2, obstacles)
 
                         if margin2 > self._margin_max:
-                            # Both steps clear
-                            active = (i != 0 or j != 0) # Active if we deviated
+                            # Both stages clear; OA is active only if we deviated from straight path
+                            active = (i != 0 or j != 0)
                             
                             final_bearing = bearing_test
                             final_margin = margin
@@ -223,12 +226,12 @@ class AP_OABendyRuler:
                             # Create new destination point
                             dest_new = self.offset_bearing(current_loc, final_bearing, min(distance_to_dest, lookahead_step1_dist))
                             
-                            # Grow lookahead
+                            # Grow lookahead when planner successfully finds viable path
                             self._current_lookahead = min(self._lookahead, self._current_lookahead * 1.1)
                             
                             return dest_new
 
-        # Fallback if no full path found
+        # Fallback when no full two-stage path is clear: choose least-bad candidate
         chosen_bearing = 0.0
         chosen_distance = 0.0
 
